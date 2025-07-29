@@ -8,7 +8,8 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2025-05-23",
 	"compatibility_flags": [
-		"nodejs_compat"
+		"nodejs_compat",
+                "global_fetch_strictly_public"
 	],
 	"observability": {
 		"enabled": true
@@ -16,8 +17,9 @@
 	"containers": [
 		{
 			"class_name": "MyContainer",
-			"image": "./Dockerfile",
+			"image": "registry.cloudflare.com/53a10bdb35f546522193c9670ad3e7e5/mrs:released",
 			"max_instances": 10,
+                        "instance_type": "standard",
 			"name": "hello-containers"
 		}
 	],
@@ -36,7 +38,7 @@
 			],
 			"tag": "v1"
 		}
-	]
+	],
 	/**
 	 * Smart Placement
 	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
@@ -54,7 +56,8 @@
 	 * Environment Variables
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
 	 */
-	// "vars": { "MY_VARIABLE": "production_value" },
+	 "vars": { "AKTO_LOG_LEVEL": "DEBUG",
+                   "DATABASE_ABSTRACTOR_SERVICE_TOKEN": "eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJBa3RvIiwic3ViIjoiaW52aXRlX3VzZXIiLCJhY2NvdW50SWQiOjE3NDg4MDU3NTQsImlhdCI6MTc1MjMyMDExNCwiZXhwIjoxNzY4MjE3NzE0fQ.BC6hAMWBXZssW8ZBvnDX-8qc5zpEx7YwxEC4xkgLBWlmNKMfpZj1K4p9irQmXfZVu6qTjqFj3Y2eUFyzsK6myDcdp0AQ85BK22GqjCzh8f4h8Fl8ykWYrkuBwjgAtCRv273VyO2zdp1RYoJ7o6xdSUfEd_iHtoKlIoyUsqhj-L0iHypxwFBf8MASnTL83dWdNb7KqdN4qsuUx_W7fZAsKQULLUw3KY4mfM__JOGG2kpp68HRoyL3j29KuDCbaNgv-d0SbwoME6KPZqvs8og9asKTA8LcJkEJ65tCEPqESzFVQuO70QmhgKE-acz_n5WiO6VQLddnV9F6Dnm2EwGTyA" }
 	/**
 	 * Note: Use secrets to store sensitive data.
 	 * https://developers.cloudflare.com/workers/configuration/secrets/
