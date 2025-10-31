@@ -4,39 +4,55 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "super-resonance-827f",
+	"name": "akto-visa-poc",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-05-23",
 	"compatibility_flags": [
-		"nodejs_compat",
-                "global_fetch_strictly_public"
+		"nodejs_compat"
 	],
 	"observability": {
 		"enabled": true
 	},
 	"containers": [
 		{
-			"class_name": "MyContainer",
-			"image": "registry.cloudflare.com/<id>/mrs:released",
+			"class_name": "MiniRuntimeServiceContainer",
+			"image": "registry.cloudflare.com/53a10bdb35f546522193c9670ad3e7e5/mrs:testing9",
 			"max_instances": 10,
                         "instance_type": "standard",
-			"name": "hello-containers"
+			"name": "mini-runtime-service-container"
+		},
+		{
+			"class_name": "McpGuardrailsContainer",
+			"image": "registry.cloudflare.com/53a10bdb35f546522193c9670ad3e7e5/akto-mcp-guardrails-service:1.12.1_local",
+			"max_instances": 10,
+			"instance_type": "standard",
+			"name": "mcp-guardrails-service"
 		}
 	],
 	"durable_objects": {
 		"bindings": [
 			{
-				"class_name": "MyContainer",
-				"name": "MY_CONTAINER"
+				"class_name": "MiniRuntimeServiceContainer",
+				"name": "MINI_RUNTIME_SERVICE_CONTAINER"
+			},
+			{
+				"class_name": "McpGuardrailsContainer",
+				"name": "MCP_GUARDRAILS_CONTAINER"
 			}
 		]
 	},
 	"migrations": [
 		{
 			"new_sqlite_classes": [
-				"MyContainer"
+				"MiniRuntimeServiceContainer"
 			],
 			"tag": "v1"
+		},
+		{
+			"new_sqlite_classes": [
+				"McpGuardrailsContainer"
+			],
+			"tag": "v2"
 		}
 	],
 	/**

@@ -3,11 +3,11 @@ import { Hono } from "hono";
 
 const INSTANCE_COUNT = 3;
 
-export class MyContainer extends Container {
+export class MiniRuntimeServiceContainer extends Container {
   // Port the container listens on (default: 8080)
   defaultPort = 8080;
   // Time before container sleeps due to inactivity (default: 30s)
-  
+
   // Environment variables passed to the container
   envVars = {
     MESSAGE: "I was passed in via the container class!",
@@ -19,8 +19,6 @@ export class MyContainer extends Container {
     AKTO_CONFIG_NAME: "STAGING",
     RUNTIME_MODE: "HYBRID"
   };
-
-  
 
   // Optional lifecycle hooks
   override onStart() {
@@ -37,9 +35,27 @@ export class MyContainer extends Container {
 
 }
 
+export class McpGuardrailsContainer extends Container {
+  defaultPort = 8081;
+
+  envVars = {
+    SERVER_PORT: "8081",
+    DATABASE_ABSTRACTOR_SERVICE_URL: "https://cyborg.akto.io",
+    DATABASE_ABSTRACTOR_SERVICE_TOKEN: "<akto-api-token>",
+    AGENT_GUARD_ENGINE_URL: "https://akto-agent-guard-engine.billing-53a.workers.dev",
+    THREAT_BACKEND_URL: "https://tbs.akto.io",
+    THREAT_BACKEND_TOKEN: "<akto-api-token>",
+    LOG_LEVEL: "info",
+    GIN_MODE: "release"
+  };
+}
+
 // Create Hono app with proper typing for Cloudflare Workers
 const app = new Hono<{
-  Bindings: { MY_CONTAINER: DurableObjectNamespace<MyContainer> };
+  Bindings: {
+    MINI_RUNTIME_SERVICE_CONTAINER: DurableObjectNamespace<MiniRuntimeServiceContainer>;
+    MCP_GUARDRAILS_CONTAINER: DurableObjectNamespace<McpGuardrailsContainer>;
+  };
 }>();
 
 // Home route with available endpoints
@@ -56,20 +72,20 @@ app.get("/", (c) => {
 // Route requests to a specific container using the container ID
 app.get("/container/:id", async (c) => {
   const id = c.req.param("id");
-  const containerId = c.env.MY_CONTAINER.idFromName(`/container/${id}`);
-  const container = c.env.MY_CONTAINER.get(containerId);
+  const containerId = c.env.MINI_RUNTIME_SERVICE_CONTAINER.idFromName(`/container/${id}`);
+  const container = c.env.MINI_RUNTIME_SERVICE_CONTAINER.get(containerId);
   return await container.fetch(c.req.raw);
 });
 
 // Demonstrate error handling - this route forces a panic in the container
 app.get("/error", async (c) => {
-  const container = getContainer(c.env.MY_CONTAINER, "error-test");
+  const container = getContainer(c.env.MINI_RUNTIME_SERVICE_CONTAINER, "error-test");
   return await container.fetch(c.req.raw);
 });
 
 // Load balance requests across multiple containers
 app.get("/lb", async (c) => {
-  const container = await loadBalance(c.env.MY_CONTAINER, 3);
+  const container = await loadBalance(c.env.MINI_RUNTIME_SERVICE_CONTAINER, 3);
   return await container.fetch(c.req.raw);
 });
 
@@ -77,12 +93,22 @@ app.get("/lb", async (c) => {
 app.post("/api/ingestData", async (c) => {
 
   //const id = 1;
-  const containerInstance = getRandom(c.env.MY_CONTAINER, INSTANCE_COUNT);
-  const containerId = c.env.MY_CONTAINER.idFromName(`/container/${containerInstance}`);
-  const container = c.env.MY_CONTAINER.get(containerId);
+  const containerInstance = getRandom(c.env.MINI_RUNTIME_SERVICE_CONTAINER, INSTANCE_COUNT);
+  const containerId = c.env.MINI_RUNTIME_SERVICE_CONTAINER.idFromName(`/container/${containerInstance}`);
+  const container = c.env.MINI_RUNTIME_SERVICE_CONTAINER.get(containerId);
 
-  
-  return await container.fetch(c.req.raw);
+  // Get MCP Guardrails container instance
+  const mcpGuardrailsInstance = getRandom(c.env.MCP_GUARDRAILS_CONTAINER, INSTANCE_COUNT);
+  const mcpGuardrailsContainerId = c.env.MCP_GUARDRAILS_CONTAINER.idFromName(`/container/${mcpGuardrailsInstance}`);
+  const mcpGuardrailsContainer = c.env.MCP_GUARDRAILS_CONTAINER.get(mcpGuardrailsContainerId);
+
+  // Send requests to both containers in parallel
+  const [mainResponse] = await Promise.all([
+    container.fetch(c.req.raw.clone()),
+    mcpGuardrailsContainer.fetch(c.req.raw.clone())
+  ]);
+
+  return mainResponse;
 
 });
 

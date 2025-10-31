@@ -3,7 +3,7 @@
 // Runtime types generated with workerd@1.20250709.0 2025-05-23 nodejs_compat
 declare namespace Cloudflare {
 	interface Env {
-		MY_CONTAINER: DurableObjectNamespace<import("./src/index").MyContainer>;
+		MINI_RUNTIME_SERVICE_CONTAINER: DurableObjectNamespace<import("./src/index").MiniRuntimeServiceContainer>;
 	}
 }
 interface Env extends Cloudflare.Env {}
