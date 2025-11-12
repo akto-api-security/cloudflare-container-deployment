@@ -20,13 +20,6 @@
 			"max_instances": 10,
                         "instance_type": "standard",
 			"name": "mini-runtime-service-container"
-		},
-		{
-			"class_name": "McpGuardrailsContainer",
-			"image": "registry.cloudflare.com/53a10bdb35f546522193c9670ad3e7e5/akto-mcp-guardrails-service:1.12.1_local",
-			"max_instances": 10,
-			"instance_type": "standard",
-			"name": "mcp-guardrails-service"
 		}
 	],
 	"durable_objects": {
@@ -34,10 +27,6 @@
 			{
 				"class_name": "MiniRuntimeServiceContainer",
 				"name": "MINI_RUNTIME_SERVICE_CONTAINER"
-			},
-			{
-				"class_name": "McpGuardrailsContainer",
-				"name": "MCP_GUARDRAILS_CONTAINER"
 			}
 		]
 	},
@@ -47,12 +36,6 @@
 				"MiniRuntimeServiceContainer"
 			],
 			"tag": "v1"
-		},
-		{
-			"new_sqlite_classes": [
-				"McpGuardrailsContainer"
-			],
-			"tag": "v2"
 		}
 	],
 	/**
@@ -87,5 +70,24 @@
 	 * Service Bindings (communicate between multiple Workers)
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
 	 */
-	// "services": [{ "binding": "MY_SERVICE", "service": "my-service" }]
+	"services": [
+		{
+			"binding": "MODEL_EXECUTOR",
+			"service": "akto-agent-guard-executor"
+		}
+	],
+
+	/**
+	 * Environment Variables
+	 */
+	"vars": {
+		"DATABASE_ABSTRACTOR_SERVICE_URL": "https://cyborg.akto.io",
+		"THREAT_BACKEND_URL": "https://tbs.akto.io"
+	}
+
+	/**
+	 * Note: Secrets should be set via CLI:
+	 * wrangler secret put DATABASE_ABSTRACTOR_SERVICE_TOKEN
+	 * wrangler secret put THREAT_BACKEND_TOKEN
+	 */
 }
