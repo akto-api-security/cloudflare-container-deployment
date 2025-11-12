@@ -52,7 +52,9 @@ export async function handleBatchValidation(
     config.modelExecutorBinding,
     config.tbsToken,
     false,
-    config.executionCtx
+    config.executionCtx,
+    config.dbUrl,
+    config.dbToken
   );
   const results: ValidationBatchResult[] = [];
 
@@ -87,6 +89,7 @@ export async function handleBatchValidation(
       statusCode,
       requestPayload: data.requestPayload,
       responsePayload: data.responsePayload,
+      executionCtx: config.executionCtx,
     };
 
     // Validate request if present
@@ -144,9 +147,18 @@ export async function handleRequestValidation(
   hasAuditRules: boolean,
   modelExecutorBinding: Fetcher,
   tbsToken: string,
-  executionCtx?: ExecutionContext
+  executionCtx?: ExecutionContext,
+  databaseAbstractorUrl?: string,
+  aktoApiToken?: string
 ): Promise<{ allowed: boolean; modified: boolean; modifiedPayload?: string; reason?: string }> {
-  const processor = new MCPProcessor(modelExecutorBinding, tbsToken, false, executionCtx);
+  const processor = new MCPProcessor(
+    modelExecutorBinding,
+    tbsToken,
+    false,
+    executionCtx,
+    databaseAbstractorUrl,
+    aktoApiToken
+  );
 
   const processResult = await processor.processRequest(
     payload,
@@ -175,9 +187,18 @@ export async function handleResponseValidation(
   policies: Policy[],
   modelExecutorBinding: Fetcher,
   tbsToken: string,
-  executionCtx?: ExecutionContext
+  executionCtx?: ExecutionContext,
+  databaseAbstractorUrl?: string,
+  aktoApiToken?: string
 ): Promise<{ allowed: boolean; modified: boolean; modifiedPayload?: string; reason?: string }> {
-  const processor = new MCPProcessor(modelExecutorBinding, tbsToken, false, executionCtx);
+  const processor = new MCPProcessor(
+    modelExecutorBinding,
+    tbsToken,
+    false,
+    executionCtx,
+    databaseAbstractorUrl,
+    aktoApiToken
+  );
 
   const processResult = await processor.processResponse(payload, valCtx, policies);
 

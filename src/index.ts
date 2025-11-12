@@ -7,8 +7,6 @@ import {
   handleResponseValidation,
 } from "./handlers/validation-handler";
 import type {
-  ValidationResponse,
-  ValidationBatchResult,
   IngestDataBatch,
 } from "./types/mcp";
 
@@ -132,13 +130,11 @@ app.post("/api/ingestData", async (c) => {
   ]);
 
   // Return validation results
-  const response: ValidationResponse = {
+  return c.json({
     success: true,
     result: "SUCCESS",
     results,
-  };
-
-  return c.json(response);
+  });
 });
 
 // Health check endpoint
@@ -169,7 +165,9 @@ app.post("/api/validate/request", async (c) => {
     hasAuditRules,
     c.env.MODEL_EXECUTOR,
     tbsToken,
-    c.executionCtx
+    c.executionCtx,
+    dbUrl,
+    dbToken
   );
 
   return c.json(result);
@@ -191,7 +189,9 @@ app.post("/api/validate/response", async (c) => {
     policies,
     c.env.MODEL_EXECUTOR,
     tbsToken,
-    c.executionCtx
+    c.executionCtx,
+    dbUrl,
+    dbToken
   );
 
   return c.json(result);

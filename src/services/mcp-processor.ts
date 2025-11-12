@@ -17,9 +17,15 @@ export class MCPProcessor {
     modelExecutorBinding: Fetcher,
     tbsToken: string = "",
     skipThreat: boolean = false,
-    executionCtx?: ExecutionContext
+    executionCtx?: ExecutionContext,
+    databaseAbstractorUrl?: string,
+    aktoApiToken?: string
   ) {
-    this.validator = new PolicyValidator(modelExecutorBinding);
+    this.validator = new PolicyValidator(
+      modelExecutorBinding,
+      databaseAbstractorUrl,
+      aktoApiToken
+    );
     this.tbsToken = tbsToken;
     this.skipThreat = skipThreat;
     this.executionCtx = executionCtx;

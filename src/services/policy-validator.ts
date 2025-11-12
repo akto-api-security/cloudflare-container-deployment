@@ -7,6 +7,9 @@ import type {
 } from "../types/mcp";
 import { ScannerClient, FilterType } from "./scanner-client";
 import { AuditValidator } from "./audit-validator";
+import { RegexValidator } from "./regex-validator";
+import { PIIValidator } from "./pii-validator";
+import { McpMetadataValidator } from "./mcp-metadata-validator";
 
 /**
  * Safe MCP methods that don't require threat scanning
@@ -25,10 +28,31 @@ const SAFE_MCP_METHODS = new Set([
 export class PolicyValidator {
   private scannerClient: ScannerClient;
   private auditValidator: AuditValidator;
+  private regexValidator: RegexValidator;
+  private piiValidator: PIIValidator;
+  private mcpMetadataValidator: McpMetadataValidator | null;
 
-  constructor(modelExecutorBinding: Fetcher) {
+  constructor(
+    modelExecutorBinding: Fetcher,
+    databaseAbstractorUrl?: string,
+    aktoApiToken?: string
+  ) {
     this.scannerClient = new ScannerClient(modelExecutorBinding);
     this.auditValidator = new AuditValidator();
+    this.regexValidator = new RegexValidator();
+    this.piiValidator = new PIIValidator();
+
+    // Initialize MCP metadata validator if credentials are provided
+    this.mcpMetadataValidator =
+      databaseAbstractorUrl && aktoApiToken
+        ? new McpMetadataValidator(databaseAbstractorUrl, aktoApiToken)
+        : null;
+
+    if (this.mcpMetadataValidator) {
+      console.log("[PolicyValidator] MCP metadata validator initialized");
+    } else {
+      console.log("[PolicyValidator] MCP metadata validator NOT initialized (missing credentials)");
+    }
   }
 
   /**
@@ -173,7 +197,40 @@ export class PolicyValidator {
       };
     }
 
-    // Collect scanner tasks from policies with policy tracking
+    // Step 2a: Check local rules first (regex, PII)
+    for (const policy of policies) {
+      if (!policy.active) continue;
+
+      const requestRules = policy.filters.requestPayload || [];
+
+      for (const rule of requestRules) {
+        // Check regex rules
+        if (rule.type === "regex" && rule.pattern) {
+          const regexResult = this.regexValidator.validate(extractedPayload, rule, policy);
+          if (!regexResult.allowed) {
+            return regexResult;
+          }
+          if (regexResult.modified && regexResult.modifiedPayload) {
+            // TODO: Handle payload modification
+            console.log("[PolicyValidator] Regex rule modified payload (modification not yet applied)");
+          }
+        }
+
+        // Check PII rules
+        if (rule.type === "pii" && rule.pattern) {
+          const piiResult = this.piiValidator.validate(extractedPayload, rule, policy);
+          if (!piiResult.allowed) {
+            return piiResult;
+          }
+          if (piiResult.modified && piiResult.modifiedPayload) {
+            // TODO: Handle payload modification
+            console.log("[PolicyValidator] PII rule modified payload (modification not yet applied)");
+          }
+        }
+      }
+    }
+
+    // Step 2b: Collect scanner tasks from policies with policy tracking
     interface ScannerTask extends ScannerInfo {
       policyId: string;
       policyName: string;
@@ -264,7 +321,40 @@ export class PolicyValidator {
 
     const policies = valCtx.policies || [];
 
-    // Collect scanner tasks from policies with policy tracking
+    // Step 1: Check local rules first (regex, PII)
+    for (const policy of policies) {
+      if (!policy.active) continue;
+
+      const responseRules = policy.filters.responsePayload || [];
+
+      for (const rule of responseRules) {
+        // Check regex rules
+        if (rule.type === "regex" && rule.pattern) {
+          const regexResult = this.regexValidator.validate(payload, rule, policy);
+          if (!regexResult.allowed) {
+            return regexResult;
+          }
+          if (regexResult.modified && regexResult.modifiedPayload) {
+            // TODO: Handle payload modification
+            console.log("[PolicyValidator] Regex rule modified response payload (modification not yet applied)");
+          }
+        }
+
+        // Check PII rules
+        if (rule.type === "pii" && rule.pattern) {
+          const piiResult = this.piiValidator.validate(payload, rule, policy);
+          if (!piiResult.allowed) {
+            return piiResult;
+          }
+          if (piiResult.modified && piiResult.modifiedPayload) {
+            // TODO: Handle payload modification
+            console.log("[PolicyValidator] PII rule modified response payload (modification not yet applied)");
+          }
+        }
+      }
+    }
+
+    // Step 2: Collect scanner tasks from policies with policy tracking
     interface ScannerTask extends ScannerInfo {
       policyId: string;
       policyName: string;
@@ -317,6 +407,17 @@ export class PolicyValidator {
             },
           };
         }
+      }
+    }
+
+    // Step 3: Trigger async MCP metadata validation for list responses
+    // This runs in the background and doesn't block the response
+    if (this.mcpMetadataValidator && valCtx.executionCtx) {
+      const validationPromise = this.mcpMetadataValidator.validateMcpMetadataAsync(valCtx);
+      if (validationPromise) {
+        // Use waitUntil to ensure the async validation completes even after response is sent
+        valCtx.executionCtx.waitUntil(validationPromise);
+        console.log("[PolicyValidator] MCP metadata validation scheduled via waitUntil");
       }
     }
 

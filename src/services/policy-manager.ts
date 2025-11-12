@@ -61,6 +61,40 @@ export function convertGuardrailsToPolicy(gp: GuardrailsPolicy): Policy {
     }
   }
 
+  // 4. PII Types (matches Go guardrails_converter.go:189-205)
+  if (gp.piiTypes && gp.piiTypes.length > 0) {
+    for (const piiType of gp.piiTypes) {
+      // Determine action based on behavior: "mask" → "redact", otherwise "block"
+      const action = piiType.behavior === "mask" ? "redact" : "block";
+
+      const piiRule: FilterRule = {
+        type: "pii",
+        pattern: piiType.type, // PII type name (e.g., "phone", "email", "password")
+        action,
+      };
+
+      if (gp.applyOnRequest) requestRules.push(piiRule);
+      if (gp.applyOnResponse) responseRules.push(piiRule);
+    }
+  }
+
+  // 5. Regex Patterns (matches Go guardrails_converter.go:207-217)
+  if (gp.regexPatternsV2 && gp.regexPatternsV2.length > 0) {
+    for (const regexPattern of gp.regexPatternsV2) {
+      // Use provided action or default to "block"
+      const action = regexPattern.action || "block";
+
+      const regexRule: FilterRule = {
+        type: "regex",
+        pattern: regexPattern.pattern,
+        action,
+      };
+
+      if (gp.applyOnRequest) requestRules.push(regexRule);
+      if (gp.applyOnResponse) responseRules.push(regexRule);
+    }
+  }
+
   return {
     id: "MCPGuardrails", // Use consistent ID like Go implementation
     name: gp.name || "",

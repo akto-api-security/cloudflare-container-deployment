@@ -79,6 +79,7 @@ export interface ValidationContext {
   policies?: Policy[];
   auditPolicies?: Record<string, AuditPolicy>;
   hasAuditRules?: boolean;
+  executionCtx?: ExecutionContext;
 }
 
 export interface ValidationResult {
