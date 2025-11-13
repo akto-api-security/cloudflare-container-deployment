@@ -1,4 +1,4 @@
-import { Container, loadBalance, getContainer, getRandom } from "@cloudflare/containers";
+import { Container, loadBalance, getContainer } from "@cloudflare/containers";
 import { Hono } from "hono";
 import { fetchGuardrailPolicies, fetchMcpAuditInfo } from "./services/policy-manager";
 import {
@@ -10,38 +10,64 @@ import type {
   IngestDataBatch,
 } from "./types/mcp";
 
-const INSTANCE_COUNT = 3;
-
 export class MiniRuntimeServiceContainer extends Container {
   // Port the container listens on (default: 8080)
   defaultPort = 8080;
   // Time before container sleeps due to inactivity (default: 30s)
   sleepAfter = "1h";
+  // Required ports to wait for before accepting requests
+  requiredPorts = [8080];
 
-  // Environment variables passed to the container
-  envVars = {
-    MESSAGE: "I was passed in via the container class!",
-    AKTO_LOG_LEVEL: "DEBUG",
-    DATABASE_ABSTRACTOR_SERVICE_URL: "https://cyborg.akto.io",
-    DATABASE_ABSTRACTOR_SERVICE_TOKEN: "<data-abstractor-token>",
-    AKTO_TRAFFIC_QUEUE_THRESHOLD: "100",
-    AKTO_INACTIVE_QUEUE_PROCESSING_TIME: "5000",
-    AKTO_TRAFFIC_PROCESSING_JOB_INTERVAL: "10",
-    AKTO_CONFIG_NAME: "STAGING",
-    RUNTIME_MODE: "HYBRID"
-  };
+  private workerEnv: any;
+
+  constructor(state: DurableObjectState, env: any) {
+    super(state, env);
+    this.workerEnv = env;
+  }
+
+  override async fetch(request: Request): Promise<Response> {
+    // Set env vars dynamically from Worker env before starting
+    this.envVars = {
+      MESSAGE: "I was passed in via the container class!",
+      AKTO_LOG_LEVEL: "DEBUG",
+      DATABASE_ABSTRACTOR_SERVICE_URL: this.workerEnv.DATABASE_ABSTRACTOR_SERVICE_URL || "https://cyborg.akto.io",
+      DATABASE_ABSTRACTOR_SERVICE_TOKEN: this.workerEnv.DATABASE_ABSTRACTOR_SERVICE_TOKEN || "",
+      AKTO_TRAFFIC_QUEUE_THRESHOLD: "100",
+      AKTO_INACTIVE_QUEUE_PROCESSING_TIME: "5000",
+      AKTO_TRAFFIC_PROCESSING_JOB_INTERVAL: "10",
+      AKTO_CONFIG_NAME: "STAGING",
+      RUNTIME_MODE: "HYBRID",
+    };
+
+    try {
+      // Start container and wait for ports with extended timeout for cold starts
+      await this.startAndWaitForPorts(this.defaultPort, {
+        portReadyTimeoutMS: 120000, // 2 minutes for cold start
+        instanceGetTimeoutMS: 120000,
+      });
+
+      // Forward request to container
+      return await super.fetch(request);
+    } catch (error) {
+      console.error("[Container] Fetch error:", error);
+      return new Response(JSON.stringify({ error: "Container startup failed", details: String(error) }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+  }
 
   // Optional lifecycle hooks
   override onStart() {
-    console.log("Container successfully started");
+    console.log("[Container] Successfully started");
   }
 
   override onStop() {
-    console.log("Container successfully shut down");
+    console.log("[Container] Successfully shut down");
   }
 
   override onError(error: unknown) {
-    console.log("Container error:", error);
+    console.log("[Container] Error:", error);
   }
 
 }
@@ -55,8 +81,52 @@ const app = new Hono<{
     DATABASE_ABSTRACTOR_SERVICE_TOKEN: string;
     THREAT_BACKEND_URL: string;
     THREAT_BACKEND_TOKEN: string;
+    ENABLE_MCP_GUARDRAILS: string;
   };
 }>();
+
+/**
+ * Forward request to container (env vars are set dynamically in Container.fetch())
+ */
+async function forwardToContainer(
+  request: Request,
+  env: {
+    MINI_RUNTIME_SERVICE_CONTAINER: DurableObjectNamespace<MiniRuntimeServiceContainer>;
+  }
+): Promise<Response> {
+  // Get container instance
+  const containerId = env.MINI_RUNTIME_SERVICE_CONTAINER.idFromName("main");
+  const container = env.MINI_RUNTIME_SERVICE_CONTAINER.get(containerId);
+
+  // Forward request - env vars are set in the Container's fetch() override
+  return await container.fetch(request);
+}
+
+/**
+ * Run MCP guardrails validation on batch data
+ */
+async function runMcpGuardrails(
+  request: Request,
+  env: {
+    DATABASE_ABSTRACTOR_SERVICE_URL: string;
+    DATABASE_ABSTRACTOR_SERVICE_TOKEN: string;
+    MODEL_EXECUTOR: Fetcher;
+    THREAT_BACKEND_TOKEN: string;
+  },
+  executionCtx: ExecutionContext
+) {
+  // Parse request body to extract batch data
+  const requestBody = await request.json() as any;
+  const batchData: IngestDataBatch[] = requestBody.batchData || [];
+
+  return await handleBatchValidation(batchData, {
+    dbUrl: env.DATABASE_ABSTRACTOR_SERVICE_URL || "https://cyborg.akto.io",
+    dbToken: env.DATABASE_ABSTRACTOR_SERVICE_TOKEN || "",
+    modelExecutorBinding: env.MODEL_EXECUTOR,
+    tbsToken: env.THREAT_BACKEND_TOKEN || "",
+    executionCtx,
+  });
+}
 
 
 // Home route with available endpoints
@@ -92,49 +162,35 @@ app.get("/lb", async (c) => {
 
 // Main data ingestion endpoint with validation
 app.post("/api/ingestData", async (c) => {
-  const containerInstance = getRandom(c.env.MINI_RUNTIME_SERVICE_CONTAINER, INSTANCE_COUNT);
-  const containerId = c.env.MINI_RUNTIME_SERVICE_CONTAINER.idFromName(`/container/${containerInstance}`);
-  const container = c.env.MINI_RUNTIME_SERVICE_CONTAINER.get(containerId);
+  // Check if MCP guardrails are enabled via feature flag
+  const mcpGuardrailsEnabled = c.env.ENABLE_MCP_GUARDRAILS === "true";
 
-  // Clone the request first before reading body
-  const clonedRequest = c.req.raw.clone();
+  if (mcpGuardrailsEnabled) {
+    // Clone the request to send it to two different places
+    const requestForGuardrails = c.req.raw.clone();
+    const requestForContainer = c.req.raw.clone();
 
-  // Parse request body
-  const requestBody = await c.req.json<any>();
-  const batchData: IngestDataBatch[] = requestBody.batchData || [];
+    // Run validation and container ingestion in parallel
+    const [results] = await Promise.all([
+      runMcpGuardrails(requestForGuardrails, c.env, c.executionCtx),
+      forwardToContainer(requestForContainer, c.env),
+    ]);
 
-  if (!batchData || batchData.length === 0) {
     return c.json({
-      success: false,
-      result: "ERROR",
-      errors: ["No batch data provided. Expected 'batchData' array."],
+      success: true,
+      result: "SUCCESS",
+      results,
+    });
+  } else {
+    // Only forward to container without validation
+    await forwardToContainer(c.req.raw, c.env);
+
+    return c.json({
+      success: true,
+      result: "SUCCESS",
+      message: "Data ingested (MCP guardrails disabled)",
     });
   }
-
-  // Run validation and container ingestion in parallel
-  const dbUrl = c.env.DATABASE_ABSTRACTOR_SERVICE_URL || "https://cyborg.akto.io";
-  const dbToken = c.env.DATABASE_ABSTRACTOR_SERVICE_TOKEN || "";
-  const tbsToken = c.env.THREAT_BACKEND_TOKEN || "";
-
-  const [results] = await Promise.all([
-    // Validation (fetches policies internally)
-    handleBatchValidation(batchData, {
-      dbUrl,
-      dbToken,
-      modelExecutorBinding: c.env.MODEL_EXECUTOR,
-      tbsToken,
-      executionCtx: c.executionCtx,
-    }),
-    // Container ingestion (runs in parallel)
-    container.fetch(clonedRequest),
-  ]);
-
-  // Return validation results
-  return c.json({
-    success: true,
-    result: "SUCCESS",
-    results,
-  });
 });
 
 // Health check endpoint

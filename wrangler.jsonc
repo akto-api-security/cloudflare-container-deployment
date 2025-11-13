@@ -10,6 +10,10 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	// Set workers_dev and preview_urls to false when deploying private Workers 
+	// "workers_dev": false,
+	// "preview_urls": false,
+
 	"observability": {
 		"enabled": true
 	},
@@ -18,7 +22,7 @@
 			"class_name": "MiniRuntimeServiceContainer",
 			"image": "registry.cloudflare.com/53a10bdb35f546522193c9670ad3e7e5/mrs:testing9",
 			"max_instances": 10,
-                        "instance_type": "standard",
+			"instance_type": "standard",
 			"name": "mini-runtime-service-container"
 		}
 	],
@@ -38,38 +42,6 @@
 			"tag": "v1"
 		}
 	],
-	/**
-	 * Smart Placement
-	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
-	 */
-	// "placement": { "mode": "smart" },
-
-	/**
-	 * Bindings
-	 * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
-	 * databases, object storage, AI inference, real-time communication and more.
-	 * https://developers.cloudflare.com/workers/runtime-apis/bindings/
-	 */
-
-	/**
-	 * Environment Variables
-	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
-	 */  
-	/**
-	 * Note: Use secrets to store sensitive data.
-	 * https://developers.cloudflare.com/workers/configuration/secrets/
-	 */
-
-	/**
-	 * Static Assets
-	 * https://developers.cloudflare.com/workers/static-assets/binding/
-	 */
-	// "assets": { "directory": "./public/", "binding": "ASSETS" },
-
-	/**
-	 * Service Bindings (communicate between multiple Workers)
-	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
-	 */
 	"services": [
 		{
 			"binding": "MODEL_EXECUTOR",
@@ -82,12 +54,16 @@
 	 */
 	"vars": {
 		"DATABASE_ABSTRACTOR_SERVICE_URL": "https://cyborg.akto.io",
-		"THREAT_BACKEND_URL": "https://tbs.akto.io"
+		"THREAT_BACKEND_URL": "https://tbs.akto.io",
+		"ENABLE_MCP_GUARDRAILS": "true"
 	}
 
 	/**
 	 * Note: Secrets should be set via CLI:
 	 * wrangler secret put DATABASE_ABSTRACTOR_SERVICE_TOKEN
 	 * wrangler secret put THREAT_BACKEND_TOKEN
+	 *
+	 * Feature Flags:
+	 * ENABLE_MCP_GUARDRAILS: Set to "true" to enable MCP guardrails validation, "false" to disable
 	 */
 }
