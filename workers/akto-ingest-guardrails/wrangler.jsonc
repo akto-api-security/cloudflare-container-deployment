@@ -4,48 +4,48 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "akto-visa-poc",
+	"name": "akto-ingest-guardrails",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-05-23",
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
 	// Set workers_dev and preview_urls to false when deploying private Workers 
-	// "workers_dev": false,
-	// "preview_urls": false,
+	"workers_dev": false,
+	"preview_urls": false,
 
 	"observability": {
 		"enabled": true
 	},
 	"containers": [
 		{
-			"class_name": "MiniRuntimeServiceContainer",
-			"image": "registry.cloudflare.com/53a10bdb35f546522193c9670ad3e7e5/mrs:testing9",
+			"class_name": "AktoMiniRuntimeServiceContainer",
+			"image": "registry.cloudflare.com/<YOUR_CLOUDFLARE_ACCOUNT_ID>/mrs:testing9",
 			"max_instances": 10,
-			"instance_type": "standard",
-			"name": "mini-runtime-service-container"
+			"instance_type": "standard-1",
+			"name": "akto-mini-runtime-service-container"
 		}
 	],
 	"durable_objects": {
 		"bindings": [
 			{
-				"class_name": "MiniRuntimeServiceContainer",
-				"name": "MINI_RUNTIME_SERVICE_CONTAINER"
+				"class_name": "AktoMiniRuntimeServiceContainer",
+				"name": "AKTO_MINI_RUNTIME_SERVICE_CONTAINER"
 			}
 		]
 	},
 	"migrations": [
 		{
 			"new_sqlite_classes": [
-				"MiniRuntimeServiceContainer"
+				"AktoMiniRuntimeServiceContainer"
 			],
 			"tag": "v1"
 		}
 	],
 	"services": [
 		{
-			"binding": "MODEL_EXECUTOR",
-			"service": "akto-agent-guard-executor"
+			"binding": "AKTO_GUARDRAILS_EXECUTOR",
+			"service": "akto-guardrails-executor"
 		}
 	],
 

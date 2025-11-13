@@ -1,59 +1,99 @@
-# Containers Starter
+# Akto Cloudflare Workers
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/templates/tree/main/containers-template)
+This repository contains two Cloudflare Workers for Akto's API security platform:
 
-![Containers Template Preview](https://imagedelivery.net/_yJ02hpOMj_EnGvsU2aygw/5aba1fb7-b937-46fd-fa67-138221082200/public)
+1. **akto-ingest-guardrails** - Ingests MCP traffic and applies guardrails validation
+2. **akto-guardrails-executor** - Executes Python-based security scanning at the edge
 
-<!-- dash-content-start -->
+## Prerequisites
 
-This is a [Container](https://developers.cloudflare.com/containers/) starter template.
+- Node.js 18+ and npm
+- Cloudflare account with Workers enabled
+- Wrangler CLI installed globally: `npm install -g wrangler`
+- Authenticated with Wrangler: `wrangler login`
 
-It demonstrates basic Container coniguration, launching and routing to individual container, load balancing over multiple container, running basic hooks on container status changes.
+## Deployment
 
-<!-- dash-content-end -->
-
-Outside of this repo, you can start a new project with this template using [C3](https://developers.cloudflare.com/pages/get-started/c3/) (the `create-cloudflare` CLI):
-
-```bash
-npm create cloudflare@latest -- --template=cloudflare/templates/containers-template
-```
-
-## Getting Started
-
-First, run:
+### 1. Deploy akto-guardrails-executor
 
 ```bash
+cd workers/akto-guardrails-executor
 npm install
-# or
-yarn install
-# or
-pnpm install
-# or
-bun install
+wrangler deploy
 ```
 
-Then run the development server (using the package manager of your choice):
+### 2. Deploy akto-ingest-guardrails
 
 ```bash
-npm run dev
+cd workers/akto-ingest-guardrails
+npm install
+
+# Set secrets
+wrangler secret put DATABASE_ABSTRACTOR_SERVICE_TOKEN
+wrangler secret put THREAT_BACKEND_TOKEN
+
+# Deploy
+wrangler deploy
 ```
 
-Open [http://localhost:8787](http://localhost:8787) with your browser to see the result.
+## Configuration
 
-You can start editing your Worker by modifying `src/index.ts` and you can start
-editing your Container by editing the content of `container_src`.
+### akto-ingest-guardrails
 
-## Deploying To Production
+Environment variables in `wrangler.jsonc`:
+- `DATABASE_ABSTRACTOR_SERVICE_URL` - Cyborg API URL (default: https://cyborg.akto.io)
+- `THREAT_BACKEND_URL` - TBS API URL (default: https://tbs.akto.io)
+- `ENABLE_MCP_GUARDRAILS` - Enable/disable guardrails (default: "true")
 
-| Command          | Action                                |
-| :--------------- | :------------------------------------ |
-| `npm run deploy` | Deploy your application to Cloudflare |
+Secrets (set via CLI):
+- `DATABASE_ABSTRACTOR_SERVICE_TOKEN` - Authentication token for Cyborg API
+- `THREAT_BACKEND_TOKEN` - Authentication token for TBS API
 
-## Learn More
+### akto-guardrails-executor
 
-To learn more about Containers, take a look at the following resources:
+Configuration in `wrangler.jsonc`:
+- Container instance type: `standard-3`
+- Max instances: 10
+- Default port: 8092
 
-- [Container Documentation](https://developers.cloudflare.com/containers/) - learn about Containers
-- [Container Class](https://github.com/cloudflare/containers) - learn about the Container helper class
+## Service Bindings
 
-Your feedback and contributions are welcome!
+The `akto-ingest-guardrails` worker depends on `akto-guardrails-executor` via service binding.
+
+Update the service binding in `workers/akto-ingest-guardrails/wrangler.jsonc`:
+```jsonc
+"services": [
+  {
+    "binding": "MODEL_EXECUTOR",
+    "service": "akto-agent-guard-executor"
+  }
+]
+```
+
+## Development
+
+Run locally with:
+```bash
+wrangler dev
+```
+
+## Architecture
+
+```
+┌─────────────────────────┐
+│ akto-ingest-guardrails  │ (Main Worker)
+│  - Receives MCP traffic │
+│  - Validates requests   │
+│  - Forwards to container│
+└───────┬─────────────────┘
+        │
+        ├──► Service Binding
+        │
+        ▼
+┌─────────────────────────┐
+│akto-guardrails-executor │ (Executor Worker)
+│  - Python container     │
+│  - Security scanning    │
+│  - LLM-based validation │
+└─────────────────────────┘
+```

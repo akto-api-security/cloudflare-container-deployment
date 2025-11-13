@@ -10,11 +10,11 @@ import type {
   IngestDataBatch,
 } from "./types/mcp";
 
-export class MiniRuntimeServiceContainer extends Container {
+export class AktoMiniRuntimeServiceContainer extends Container {
   // Port the container listens on (default: 8080)
   defaultPort = 8080;
   // Time before container sleeps due to inactivity (default: 30s)
-  sleepAfter = "1h";
+  sleepAfter = "2h";
   // Required ports to wait for before accepting requests
   requiredPorts = [8080];
 
@@ -28,7 +28,6 @@ export class MiniRuntimeServiceContainer extends Container {
   override async fetch(request: Request): Promise<Response> {
     // Set env vars dynamically from Worker env before starting
     this.envVars = {
-      MESSAGE: "I was passed in via the container class!",
       AKTO_LOG_LEVEL: "DEBUG",
       DATABASE_ABSTRACTOR_SERVICE_URL: this.workerEnv.DATABASE_ABSTRACTOR_SERVICE_URL || "https://cyborg.akto.io",
       DATABASE_ABSTRACTOR_SERVICE_TOKEN: this.workerEnv.DATABASE_ABSTRACTOR_SERVICE_TOKEN || "",
@@ -75,8 +74,8 @@ export class MiniRuntimeServiceContainer extends Container {
 // Create Hono app with proper typing for Cloudflare Workers
 const app = new Hono<{
   Bindings: {
-    MINI_RUNTIME_SERVICE_CONTAINER: DurableObjectNamespace<MiniRuntimeServiceContainer>;
-    MODEL_EXECUTOR: Fetcher;
+    AKTO_MINI_RUNTIME_SERVICE_CONTAINER: DurableObjectNamespace<AktoMiniRuntimeServiceContainer>;
+    AKTO_GUARDRAILS_EXECUTOR: Fetcher;
     DATABASE_ABSTRACTOR_SERVICE_URL: string;
     DATABASE_ABSTRACTOR_SERVICE_TOKEN: string;
     THREAT_BACKEND_URL: string;
@@ -91,12 +90,12 @@ const app = new Hono<{
 async function forwardToContainer(
   request: Request,
   env: {
-    MINI_RUNTIME_SERVICE_CONTAINER: DurableObjectNamespace<MiniRuntimeServiceContainer>;
+    AKTO_MINI_RUNTIME_SERVICE_CONTAINER: DurableObjectNamespace<AktoMiniRuntimeServiceContainer>;
   }
 ): Promise<Response> {
   // Get container instance
-  const containerId = env.MINI_RUNTIME_SERVICE_CONTAINER.idFromName("main");
-  const container = env.MINI_RUNTIME_SERVICE_CONTAINER.get(containerId);
+  const containerId = env.AKTO_MINI_RUNTIME_SERVICE_CONTAINER.idFromName("main");
+  const container = env.AKTO_MINI_RUNTIME_SERVICE_CONTAINER.get(containerId);
 
   // Forward request - env vars are set in the Container's fetch() override
   return await container.fetch(request);
@@ -110,7 +109,7 @@ async function runMcpGuardrails(
   env: {
     DATABASE_ABSTRACTOR_SERVICE_URL: string;
     DATABASE_ABSTRACTOR_SERVICE_TOKEN: string;
-    MODEL_EXECUTOR: Fetcher;
+    AKTO_GUARDRAILS_EXECUTOR: Fetcher;
     THREAT_BACKEND_TOKEN: string;
   },
   executionCtx: ExecutionContext
@@ -122,7 +121,7 @@ async function runMcpGuardrails(
   return await handleBatchValidation(batchData, {
     dbUrl: env.DATABASE_ABSTRACTOR_SERVICE_URL || "https://cyborg.akto.io",
     dbToken: env.DATABASE_ABSTRACTOR_SERVICE_TOKEN || "",
-    modelExecutorBinding: env.MODEL_EXECUTOR,
+    modelExecutorBinding: env.AKTO_GUARDRAILS_EXECUTOR,
     tbsToken: env.THREAT_BACKEND_TOKEN || "",
     executionCtx,
   });
@@ -143,20 +142,20 @@ app.get("/", (c) => {
 // Route requests to a specific container using the container ID
 app.get("/container/:id", async (c) => {
   const id = c.req.param("id");
-  const containerId = c.env.MINI_RUNTIME_SERVICE_CONTAINER.idFromName(`/container/${id}`);
-  const container = c.env.MINI_RUNTIME_SERVICE_CONTAINER.get(containerId);
+  const containerId = c.env.AKTO_MINI_RUNTIME_SERVICE_CONTAINER.idFromName(`/container/${id}`);
+  const container = c.env.AKTO_MINI_RUNTIME_SERVICE_CONTAINER.get(containerId);
   return await container.fetch(c.req.raw);
 });
 
 // Demonstrate error handling - this route forces a panic in the container
 app.get("/error", async (c) => {
-  const container = getContainer(c.env.MINI_RUNTIME_SERVICE_CONTAINER, "error-test");
+  const container = getContainer(c.env.AKTO_MINI_RUNTIME_SERVICE_CONTAINER, "error-test");
   return await container.fetch(c.req.raw);
 });
 
 // Load balance requests across multiple containers
 app.get("/lb", async (c) => {
-  const container = await loadBalance(c.env.MINI_RUNTIME_SERVICE_CONTAINER, 3);
+  const container = await loadBalance(c.env.AKTO_MINI_RUNTIME_SERVICE_CONTAINER, 3);
   return await container.fetch(c.req.raw);
 });
 
@@ -219,7 +218,7 @@ app.post("/api/validate/request", async (c) => {
     policies,
     auditPolicies,
     hasAuditRules,
-    c.env.MODEL_EXECUTOR,
+    c.env.AKTO_GUARDRAILS_EXECUTOR,
     tbsToken,
     c.executionCtx,
     dbUrl,
@@ -243,7 +242,7 @@ app.post("/api/validate/response", async (c) => {
     payload,
     {},
     policies,
-    c.env.MODEL_EXECUTOR,
+    c.env.AKTO_GUARDRAILS_EXECUTOR,
     tbsToken,
     c.executionCtx,
     dbUrl,
