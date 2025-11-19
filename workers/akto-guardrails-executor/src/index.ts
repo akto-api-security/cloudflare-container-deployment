@@ -1,5 +1,6 @@
 import { Container, getContainer } from "@cloudflare/containers";
 import { Hono } from "hono";
+import { replicateRequest } from "./utils/request-utils";
 
 /**
  * Akto Agent Guard Executor Cloudflare Worker
@@ -76,10 +77,15 @@ export default {
 
       // Try to extract scanner_name from request body for instance routing
       let scannerName = 'default-executor';
+      let requestToForward = request;
 
       try {
         if (request.method === 'POST' && request.headers.get('content-type')?.includes('application/json')) {
-          const body = await request.clone().json() as any;
+          // Replicate request to read body and forward independently
+          const [requestForReading, requestForForwarding] = await replicateRequest(request);
+          requestToForward = requestForForwarding;
+
+          const body = await requestForReading.json() as any;
           scannerName = body.scanner_name || scannerName;
         }
       } catch (e) {
@@ -100,7 +106,7 @@ export default {
       console.log(`[Execute Request] Container started and ports ready in ${startDuration}ms`);
 
       // Forward the request to the Durable Object (which will forward to the container)
-      const response = await stub.fetch(request);
+      const response = await stub.fetch(requestToForward);
       console.log(`[Execute Request] Response status: ${response.status}`);
       return response;
     } catch (error) {

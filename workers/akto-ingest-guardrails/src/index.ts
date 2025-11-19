@@ -9,6 +9,7 @@ import {
 import type {
   IngestDataBatch,
 } from "./types/mcp";
+import { replicateRequest } from "./utils/request-utils";
 
 export class AktoMiniRuntimeServiceContainer extends Container {
   // Port the container listens on (default: 8080)
@@ -170,9 +171,8 @@ app.post("/api/ingestData", async (c) => {
   const mcpGuardrailsEnabled = c.env.ENABLE_MCP_GUARDRAILS === "true";
 
   if (mcpGuardrailsEnabled) {
-    // Clone the request to send it to two different places
-    const requestForGuardrails = c.req.raw.clone();
-    const requestForContainer = c.req.raw.clone();
+    // Replicate the request to send it to two different places
+    const [requestForGuardrails, requestForContainer] = await replicateRequest(c.req.raw);
 
     // Run validation and container ingestion in parallel
     const [results] = await Promise.all([
