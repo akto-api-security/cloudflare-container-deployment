@@ -50,6 +50,20 @@
 	],
 
 	/**
+	 * KV Namespaces for rate limiting
+	 * To create: wrangler kv namespace create "AKTO_GUARDRAILS_RATE_LIMIT_KV"
+	 * This will generate an ID that you should replace in the "id" field below
+	 */
+	/**
+	"kv_namespaces": [
+		{
+			"binding": "AKTO_GUARDRAILS_RATE_LIMIT_KV",
+			"id": "<GENERATED_KV_ID>"
+		}
+	],
+	*/
+
+	/**
 	 * Environment Variables
 	 */
 	"vars": {
@@ -62,6 +76,11 @@
 	 * Note: Secrets should be set via CLI:
 	 * wrangler secret put DATABASE_ABSTRACTOR_SERVICE_TOKEN
 	 * wrangler secret put THREAT_BACKEND_TOKEN
+	 *
+	 * KV Namespace Setup:
+	 * 1. Run: wrangler kv:namespace create "AKTO_GUARDRAILS_RATE_LIMIT_KV"
+	 * 2. Copy the generated ID into the "id" field in kv_namespaces above
+	 * 3. For preview: wrangler kv:namespace create "AKTO_GUARDRAILS_RATE_LIMIT_KV" --preview
 	 *
 	 * Feature Flags:
 	 * ENABLE_MCP_GUARDRAILS: Set to "true" to enable MCP guardrails validation, "false" to disable

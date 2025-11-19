@@ -1,11 +1,12 @@
 import { MCPProcessor } from "../services/mcp-processor";
-import { fetchGuardrailPolicies, fetchMcpAuditInfo } from "../services/policy-manager";
+import { fetchGuardrailPolicies, fetchMcpAuditInfo, fetchRateLimitPolicy } from "../services/policy-manager";
 import type {
   IngestDataBatch,
   ValidationBatchResult,
   Policy,
   AuditPolicy,
   ValidationContext,
+  RateLimitConfig,
 } from "../types/mcp";
 
 /**
@@ -22,39 +23,48 @@ export async function handleBatchValidation(
     policies?: Policy[];
     auditPolicies?: Record<string, AuditPolicy>;
     hasAuditRules?: boolean;
+    rateLimitPolicy?: RateLimitConfig;
     // Common
     modelExecutorBinding: Fetcher;
+    tbsHost: string;
     tbsToken: string;
     executionCtx?: ExecutionContext;
+    rateLimitKV?: KVNamespace;
   }
 ): Promise<ValidationBatchResult[]> {
   let policies: Policy[];
   let auditPolicies: Record<string, AuditPolicy>;
   let hasAuditRules: boolean;
+  let rateLimitPolicy: RateLimitConfig | undefined;
 
   // Fetch policies if DB config provided
   if (config.dbUrl && config.dbToken) {
-    const [fetchedPolicies, fetchedAuditPolicies] = await Promise.all([
+    const [fetchedPolicies, fetchedAuditPolicies, fetchedRateLimitPolicy] = await Promise.all([
       fetchGuardrailPolicies(config.dbUrl, config.dbToken),
       fetchMcpAuditInfo(config.dbUrl, config.dbToken),
+      fetchRateLimitPolicy(config.tbsHost, config.tbsToken),
     ]);
     policies = fetchedPolicies;
     auditPolicies = fetchedAuditPolicies;
     hasAuditRules = Object.keys(auditPolicies).length > 0;
+    rateLimitPolicy = fetchedRateLimitPolicy;
   } else {
     // Use pre-fetched policies
     policies = config.policies || [];
     auditPolicies = config.auditPolicies || {};
     hasAuditRules = config.hasAuditRules ?? false;
+    rateLimitPolicy = config.rateLimitPolicy;
   }
 
   const processor = new MCPProcessor(
     config.modelExecutorBinding,
+    config.tbsHost,
     config.tbsToken,
     false,
     config.executionCtx,
     config.dbUrl,
-    config.dbToken
+    config.dbToken,
+    config.rateLimitKV
   );
   const results: ValidationBatchResult[] = [];
 
@@ -89,6 +99,7 @@ export async function handleBatchValidation(
       statusCode,
       requestPayload: data.requestPayload,
       responsePayload: data.responsePayload,
+      rateLimitPolicy: rateLimitPolicy,
       executionCtx: config.executionCtx,
     };
 
@@ -146,18 +157,22 @@ export async function handleRequestValidation(
   auditPolicies: Record<string, AuditPolicy>,
   hasAuditRules: boolean,
   modelExecutorBinding: Fetcher,
+  tbsHost: string,
   tbsToken: string,
   executionCtx?: ExecutionContext,
   databaseAbstractorUrl?: string,
-  aktoApiToken?: string
+  aktoApiToken?: string,
+  rateLimitKV?: KVNamespace
 ): Promise<{ allowed: boolean; modified: boolean; modifiedPayload?: string; reason?: string }> {
   const processor = new MCPProcessor(
     modelExecutorBinding,
+    tbsHost,
     tbsToken,
     false,
     executionCtx,
     databaseAbstractorUrl,
-    aktoApiToken
+    aktoApiToken,
+    rateLimitKV
   );
 
   const processResult = await processor.processRequest(
@@ -186,18 +201,22 @@ export async function handleResponseValidation(
   valCtx: ValidationContext,
   policies: Policy[],
   modelExecutorBinding: Fetcher,
+  tbsHost: string,
   tbsToken: string,
   executionCtx?: ExecutionContext,
   databaseAbstractorUrl?: string,
-  aktoApiToken?: string
+  aktoApiToken?: string,
+  rateLimitKV?: KVNamespace
 ): Promise<{ allowed: boolean; modified: boolean; modifiedPayload?: string; reason?: string }> {
   const processor = new MCPProcessor(
     modelExecutorBinding,
+    tbsHost,
     tbsToken,
     false,
     executionCtx,
     databaseAbstractorUrl,
-    aktoApiToken
+    aktoApiToken,
+    rateLimitKV
   );
 
   const processResult = await processor.processResponse(payload, valCtx, policies);

@@ -220,10 +220,12 @@ async function callLLM(
 export class McpMetadataValidator {
   private databaseAbstractorUrl: string;
   private aktoApiToken: string;
+  private tbsHost: string;
 
-  constructor(databaseAbstractorUrl: string, aktoApiToken: string) {
+  constructor(databaseAbstractorUrl: string, aktoApiToken: string, tbsHost: string) {
     this.databaseAbstractorUrl = databaseAbstractorUrl;
     this.aktoApiToken = aktoApiToken;
+    this.tbsHost = tbsHost;
   }
 
   /**
@@ -398,6 +400,6 @@ export class McpMetadataValidator {
     };
 
     // Use existing threat reporter
-    await reportThreat(validationResult, modifiedValCtx, this.aktoApiToken);
+    await reportThreat(validationResult, modifiedValCtx, this.tbsHost, this.aktoApiToken);
   }
 }

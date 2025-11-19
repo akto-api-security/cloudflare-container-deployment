@@ -1,7 +1,6 @@
 import type { ValidationContext, ValidationResult } from "../types/mcp";
 
-const THREAT_DETECTION_API_URL =
-  "https://tbs.akto.io/api/threat_detection/record_malicious_event";
+const RECORD_THREAT_ENDPOINT = "/api/threat_detection/record_malicious_event";
 const EVENT_TYPE_SINGLE = "EVENT_TYPE_SINGLE";
 const TYPE_RULE_BASED = "Rule-Based";
 
@@ -137,6 +136,7 @@ function buildMaliciousEvent(
 export async function reportThreat(
   validationResult: ValidationResult,
   valCtx: ValidationContext,
+  tbsHost: string,
   tbsToken: string
 ): Promise<void> {
   try {
@@ -160,9 +160,10 @@ export async function reportThreat(
     };
 
     const requestBody = JSON.stringify(request);
+    const threatUrl = `${tbsHost}${RECORD_THREAT_ENDPOINT}`;
 
     console.log("[ThreatReporter] Reporting threat to TBS");
-    console.log("[ThreatReporter] URL:", THREAT_DETECTION_API_URL);
+    console.log("[ThreatReporter] URL:", threatUrl);
     console.log("[ThreatReporter] Request summary:", {
       actor: event.actor,
       endpoint: event.latestApiEndpoint,
@@ -175,7 +176,7 @@ export async function reportThreat(
     });
     console.log("[ThreatReporter] Full request body:", requestBody);
 
-    const response = await fetch(THREAT_DETECTION_API_URL, {
+    const response = await fetch(threatUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

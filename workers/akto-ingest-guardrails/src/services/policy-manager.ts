@@ -1,4 +1,5 @@
-import type { Policy, AuditPolicy, GuardrailsPolicy, FilterRule } from "../types/mcp";
+import type { Policy, AuditPolicy, GuardrailsPolicy, FilterRule, RateLimitConfig } from "../types/mcp";
+import { getRateLimitConfig } from "../config/rate-limit-defaults";
 
 /**
  * Convert GuardrailsPolicy to Policy by building filter rules
@@ -96,7 +97,7 @@ export function convertGuardrailsToPolicy(gp: GuardrailsPolicy): Policy {
   }
 
   return {
-    id: "MCPGuardrails", // Use consistent ID like Go implementation
+    id: "MCPGuardrails",
     name: gp.name || "",
     active: gp.active || false,
     action: "block",
@@ -151,6 +152,75 @@ export async function fetchGuardrailPolicies(
 
   console.log(`[PolicyManager] Fetched ${policies.length} active guardrail policies`);
   return policies;
+}
+
+interface ThreatConfigRule {
+  name: string;
+  period: number;
+  maxRequests: number;
+  mitigationPeriod: number;
+  action: string;
+  type: string;
+  behaviour: "STATIC" | "DYNAMIC";
+  rateLimitConfidence?: number;
+  autoThreshold?: {
+    percentile: string;
+    overflowPercentage: number;
+    baselinePeriod: number;
+  };
+}
+
+interface ThreatConfigResponse {
+  actor?: any;
+  ratelimitConfig?: {
+    rules?: ThreatConfigRule[];
+  };
+}
+
+/**
+ * Fetch global rate limit policy from TBS threat configuration
+ */
+export async function fetchRateLimitPolicy(
+  tbsHost: string,
+  token: string
+): Promise<RateLimitConfig> {
+  try {
+    const url = `${tbsHost}/api/dashboard/get_threat_configuration`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      console.warn("[PolicyManager] Failed to fetch rate limit policy, using defaults");
+      return getRateLimitConfig();
+    }
+
+    const data = (await response.json()) as ThreatConfigResponse;
+    const rules = data.ratelimitConfig?.rules || [];
+
+    // Find first STATIC rule
+    const staticRule = rules.find((rule) => rule.behaviour === "STATIC");
+
+    if (staticRule) {
+      console.log(`[PolicyManager] Found static rate limit rule: ${staticRule.name}`);
+      // TODO: Use actor info from response to determine identifierTypes
+      return getRateLimitConfig({
+        enabled: true,
+        limit: staticRule.maxRequests,
+        windowSeconds: staticRule.period * 60,
+      });
+    }
+
+    console.log("[PolicyManager] No static rate limit rule found, using defaults");
+    return getRateLimitConfig();
+  } catch (error) {
+    console.warn("[PolicyManager] Error fetching rate limit policy, using defaults:", error);
+    return getRateLimitConfig();
+  }
 }
 
 /**

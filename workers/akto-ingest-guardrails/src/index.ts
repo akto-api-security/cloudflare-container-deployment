@@ -81,6 +81,7 @@ const app = new Hono<{
     THREAT_BACKEND_URL: string;
     THREAT_BACKEND_TOKEN: string;
     ENABLE_MCP_GUARDRAILS: string;
+    AKTO_GUARDRAILS_RATE_LIMIT_KV: KVNamespace;
   };
 }>();
 
@@ -110,7 +111,9 @@ async function runMcpGuardrails(
     DATABASE_ABSTRACTOR_SERVICE_URL: string;
     DATABASE_ABSTRACTOR_SERVICE_TOKEN: string;
     AKTO_GUARDRAILS_EXECUTOR: Fetcher;
+    THREAT_BACKEND_URL: string;
     THREAT_BACKEND_TOKEN: string;
+    AKTO_GUARDRAILS_RATE_LIMIT_KV?: KVNamespace;
   },
   executionCtx: ExecutionContext
 ) {
@@ -122,8 +125,10 @@ async function runMcpGuardrails(
     dbUrl: env.DATABASE_ABSTRACTOR_SERVICE_URL || "https://cyborg.akto.io",
     dbToken: env.DATABASE_ABSTRACTOR_SERVICE_TOKEN || "",
     modelExecutorBinding: env.AKTO_GUARDRAILS_EXECUTOR,
+    tbsHost: env.THREAT_BACKEND_URL || "https://tbs.akto.io",
     tbsToken: env.THREAT_BACKEND_TOKEN || "",
     executionCtx,
+    rateLimitKV: env.AKTO_GUARDRAILS_RATE_LIMIT_KV,
   });
 }
 
@@ -210,6 +215,7 @@ app.post("/api/validate/request", async (c) => {
   ]);
 
   const hasAuditRules = Object.keys(auditPolicies).length > 0;
+  const tbsHost = c.env.THREAT_BACKEND_URL || "https://tbs.akto.io";
   const tbsToken = c.env.THREAT_BACKEND_TOKEN || "";
 
   const result = await handleRequestValidation(
@@ -219,10 +225,12 @@ app.post("/api/validate/request", async (c) => {
     auditPolicies,
     hasAuditRules,
     c.env.AKTO_GUARDRAILS_EXECUTOR,
+    tbsHost,
     tbsToken,
     c.executionCtx,
     dbUrl,
-    dbToken
+    dbToken,
+    c.env.AKTO_GUARDRAILS_RATE_LIMIT_KV
   );
 
   return c.json(result);
@@ -236,6 +244,7 @@ app.post("/api/validate/response", async (c) => {
   const dbToken = c.env.DATABASE_ABSTRACTOR_SERVICE_TOKEN || "";
 
   const policies = await fetchGuardrailPolicies(dbUrl, dbToken);
+  const tbsHost = c.env.THREAT_BACKEND_URL || "https://tbs.akto.io";
   const tbsToken = c.env.THREAT_BACKEND_TOKEN || "";
 
   const result = await handleResponseValidation(
@@ -243,10 +252,12 @@ app.post("/api/validate/response", async (c) => {
     {},
     policies,
     c.env.AKTO_GUARDRAILS_EXECUTOR,
+    tbsHost,
     tbsToken,
     c.executionCtx,
     dbUrl,
-    dbToken
+    dbToken,
+    c.env.AKTO_GUARDRAILS_RATE_LIMIT_KV
   );
 
   return c.json(result);

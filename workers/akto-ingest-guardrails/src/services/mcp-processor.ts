@@ -10,22 +10,28 @@ import { reportThreat } from "./threat-reporter";
 export class MCPProcessor {
   private validator: PolicyValidator;
   private skipThreat: boolean;
+  private tbsHost: string;
   private tbsToken: string;
   private executionCtx?: ExecutionContext;
 
   constructor(
     modelExecutorBinding: Fetcher,
+    tbsHost: string = "",
     tbsToken: string = "",
     skipThreat: boolean = false,
     executionCtx?: ExecutionContext,
     databaseAbstractorUrl?: string,
-    aktoApiToken?: string
+    aktoApiToken?: string,
+    rateLimitKV?: KVNamespace
   ) {
     this.validator = new PolicyValidator(
       modelExecutorBinding,
       databaseAbstractorUrl,
-      aktoApiToken
+      aktoApiToken,
+      tbsHost,
+      rateLimitKV
     );
+    this.tbsHost = tbsHost;
     this.tbsToken = tbsToken;
     this.skipThreat = skipThreat;
     this.executionCtx = executionCtx;
@@ -185,7 +191,7 @@ export class MCPProcessor {
     validationResult: any,
     valCtx: ValidationContext
   ): void {
-    const promise = reportThreat(validationResult, valCtx, this.tbsToken).catch((error) => {
+    const promise = reportThreat(validationResult, valCtx, this.tbsHost, this.tbsToken).catch((error) => {
       console.error("[MCP] Threat reporting failed:", error);
     });
 

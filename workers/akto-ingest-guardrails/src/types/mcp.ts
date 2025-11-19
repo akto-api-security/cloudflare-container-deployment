@@ -11,9 +11,25 @@ export interface FilterRuleConfig {
   [key: string]: any;
 }
 
+export const RATE_LIMIT_IDENTIFIER_TYPE = {
+  IP: "ip",
+  USER: "user",
+  TOOL: "tool",
+} as const;
+
+export type RateLimitIdentifierType = typeof RATE_LIMIT_IDENTIFIER_TYPE[keyof typeof RATE_LIMIT_IDENTIFIER_TYPE];
+
+export interface RateLimitConfig {
+  enabled: boolean;
+  limit: number;
+  windowSeconds: number;
+  identifierTypes: RateLimitIdentifierType[];
+}
+
 export interface PolicyFilters {
   requestPayload?: FilterRule[];
   responsePayload?: FilterRule[];
+  rateLimit?: RateLimitConfig;
 }
 
 export interface Policy {
@@ -62,6 +78,7 @@ export interface GuardrailsPolicy {
   deniedTopics?: DeniedTopic[];
   piiTypes?: PIIType[];
   regexPatternsV2?: RegexPatternType[];
+  rateLimit?: RateLimitConfig;
   description?: string;
 }
 
@@ -79,6 +96,7 @@ export interface ValidationContext {
   policies?: Policy[];
   auditPolicies?: Record<string, AuditPolicy>;
   hasAuditRules?: boolean;
+  rateLimitPolicy?: RateLimitConfig; // Global rate limit policy
   executionCtx?: ExecutionContext;
 }
 

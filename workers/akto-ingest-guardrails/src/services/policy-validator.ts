@@ -10,6 +10,7 @@ import { AuditValidator } from "./audit-validator";
 import { RegexValidator } from "./regex-validator";
 import { PIIValidator } from "./pii-validator";
 import { McpMetadataValidator } from "./mcp-metadata-validator";
+import { RateLimitValidator } from "./rate-limit-validator";
 
 /**
  * Safe MCP methods that don't require threat scanning
@@ -31,11 +32,14 @@ export class PolicyValidator {
   private regexValidator: RegexValidator;
   private piiValidator: PIIValidator;
   private mcpMetadataValidator: McpMetadataValidator | null;
+  private rateLimitValidator: RateLimitValidator | null;
 
   constructor(
     modelExecutorBinding: Fetcher,
     databaseAbstractorUrl?: string,
-    aktoApiToken?: string
+    aktoApiToken?: string,
+    tbsHost?: string,
+    rateLimitKV?: KVNamespace
   ) {
     this.scannerClient = new ScannerClient(modelExecutorBinding);
     this.auditValidator = new AuditValidator();
@@ -44,14 +48,23 @@ export class PolicyValidator {
 
     // Initialize MCP metadata validator if credentials are provided
     this.mcpMetadataValidator =
-      databaseAbstractorUrl && aktoApiToken
-        ? new McpMetadataValidator(databaseAbstractorUrl, aktoApiToken)
+      databaseAbstractorUrl && aktoApiToken && tbsHost
+        ? new McpMetadataValidator(databaseAbstractorUrl, aktoApiToken, tbsHost)
         : null;
+
+    // Initialize rate limit validator if KV namespace is provided
+    this.rateLimitValidator = rateLimitKV ? new RateLimitValidator(rateLimitKV) : null;
 
     if (this.mcpMetadataValidator) {
       console.log("[PolicyValidator] MCP metadata validator initialized");
     } else {
       console.log("[PolicyValidator] MCP metadata validator NOT initialized (missing credentials)");
+    }
+
+    if (this.rateLimitValidator) {
+      console.log("[PolicyValidator] Rate limit validator initialized");
+    } else {
+      console.log("[PolicyValidator] Rate limit validator NOT initialized (missing KV namespace)");
     }
   }
 
@@ -180,7 +193,26 @@ export class PolicyValidator {
       }
     }
 
-    // Step 2: Proceed with guardrails validation
+    // Step 2: Check global rate limit (before other guardrails)
+    if (this.rateLimitValidator && valCtx.rateLimitPolicy) {
+      const rateLimitResult = await this.rateLimitValidator.validateRequest(
+        payload,
+        valCtx,
+        valCtx.rateLimitPolicy
+      );
+
+      if (rateLimitResult && !rateLimitResult.allowed) {
+        // Rate limit exceeded - return immediately
+        console.log(`[PolicyValidator] Request blocked by rate limit: ${rateLimitResult.reason}`);
+        return rateLimitResult;
+      }
+
+      if (rateLimitResult && rateLimitResult.allowed) {
+        console.log(`[PolicyValidator] Request passed rate limit check`);
+      }
+    }
+
+    // Step 3: Proceed with guardrails validation
     const policies = valCtx.policies || [];
     console.log(`[PolicyValidator] Validating request with ${policies.length} guardrail policies`);
 
