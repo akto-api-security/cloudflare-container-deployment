@@ -1,0 +1,41 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "akto-guardrails-executor",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-06-23",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	// Set workers_dev and preview_urls to false when deploying private Workers
+	"workers_dev": false,
+	"preview_urls": false,
+
+	"observability": {
+		"enabled": true
+	},
+	"containers": [
+		{
+			"name": "akto-guardrails-executor-container",
+			"class_name": "AktoGuardrailsExecutorContainer",
+			"image": "registry.cloudflare.com/<YOUR_CLOUDFLARE_ACCOUNT_ID>/agent-guard-executor:testing",
+			"instance_type": "standard-3",
+			"max_instances": 10
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"class_name": "AktoGuardrailsExecutorContainer",
+				"name": "AKTO_GUARDRAILS_EXECUTOR_CONTAINER"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"new_sqlite_classes": [
+				"AktoGuardrailsExecutorContainer"
+			],
+			"tag": "v1"
+		}
+	]
+}
